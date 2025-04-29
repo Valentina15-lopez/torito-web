@@ -57,74 +57,76 @@ app.post("/upload", upload.single("image"), async (req, res) => {
   }
 });
 
-// Endpoint para procesar las fotos con la marca de agua
-app.post(
-  "/process",
-  upload.fields([{ name: "watermark", maxCount: 1 }, { name: "photos" }]),
-  async (req, res) => {
-    try {
-      const watermarkFile = req.files["watermark"][0];
-      const photos = req.files["photos"];
+// Agregar un nuevo endpoint para subir imágenes originales
+app.post("/upload-originals", upload.array("photos"), async (req, res) => {
+  try {
+    const photos = req.files;
 
-      if (!watermarkFile || !photos || photos.length === 0) {
-        return res
-          .status(400)
-          .send("Por favor, sube una marca de agua y al menos una foto.");
-      }
-
-      // Subir la marca de agua a Cloudinary
-      const watermarkResult = await cloudinary.uploader.upload(
-        watermarkFile.path,
-        {
-          folder: "marcas_agua",
-          public_id: "marca-agua",
-        }
-      );
-
-      // Registrar el resultado de la subida de la marca de agua
-      console.log(
-        "Resultado de la subida de la marca de agua:",
-        watermarkResult
-      );
-
-      // Verificar que la marca de agua se subió correctamente
-      if (!watermarkResult || !watermarkResult.public_id) {
-        return res
-          .status(500)
-          .send("Error al subir la marca de agua a Cloudinary.");
-      }
-
-      // Procesar cada foto con la marca de agua
-      const processedUrls = [];
-      for (const photo of photos) {
-        const result = await cloudinary.uploader.upload(photo.path, {
-          folder: "fotos_procesadas",
-          transformation: [
-            {
-              overlay: "marcas_agua:marca-agua", // Usar el formato correcto para el overlay
-              gravity: "south_east",
-              opacity: 50,
-              width: 0.3,
-              crop: "scale",
-            },
-          ],
-        });
-        processedUrls.push(result.secure_url);
-      }
-
-      // Eliminar archivos temporales
-      fs.unlinkSync(watermarkFile.path);
-      photos.forEach((photo) => fs.unlinkSync(photo.path));
-
-      res
-        .status(200)
-        .send({ message: "Fotos procesadas con éxito", urls: processedUrls });
-    } catch (error) {
-      console.error("Error al procesar las fotos:", error);
-      res.status(500).send("Hubo un error al procesar las fotos.");
+    if (!photos || photos.length === 0) {
+      return res.status(400).send("Por favor, sube al menos una foto.");
     }
+
+    const originalUrls = [];
+
+    // Subir cada foto original a Cloudinary
+    for (const photo of photos) {
+      const result = await cloudinary.uploader.upload(photo.path, {
+        folder: "fotos_originales",
+      });
+      originalUrls.push(result.secure_url);
+      fs.unlinkSync(photo.path); // Eliminar archivo temporal
+    }
+
+    res
+      .status(200)
+      .send({
+        message: "Imágenes originales subidas con éxito",
+        urls: originalUrls,
+      });
+  } catch (error) {
+    console.error("Error al subir las imágenes originales:", error);
+    res.status(500).send("Hubo un error al subir las imágenes originales.");
   }
-);
+});
+
+// Modificar el endpoint de procesamiento para usar imágenes originales
+app.post("/process", async (req, res) => {
+  try {
+    const { originalUrls } = req.body;
+
+    if (!originalUrls || originalUrls.length === 0) {
+      return res
+        .status(400)
+        .send("Por favor, proporciona las URLs de las imágenes originales.");
+    }
+
+    const processedUrls = [];
+
+    // Procesar cada foto original con la marca de agua
+    for (const url of originalUrls) {
+      const result = await cloudinary.uploader.upload(url, {
+        folder: "fotos_procesadas",
+        transformation: [
+          {
+            overlay: "marcas_agua:marca-agua",
+            gravity: "south_east",
+            opacity: 50,
+            width: 0.3,
+            crop: "scale",
+          },
+        ],
+      });
+      processedUrls.push(result.secure_url);
+    }
+
+    res
+      .status(200)
+      .send({ message: "Fotos procesadas con éxito", urls: processedUrls });
+  } catch (error) {
+    console.error("Error al procesar las fotos:", error);
+    res.status(500).send("Hubo un error al procesar las fotos.");
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);

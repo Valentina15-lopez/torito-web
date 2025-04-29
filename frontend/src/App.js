@@ -3,31 +3,20 @@ import axios from "axios";
 import "./App.css";
 
 function App() {
-  const [watermark, setWatermark] = useState(null);
-  const [photos, setPhotos] = useState([]);
+  const [originalPhotos, setOriginalPhotos] = useState([]);
   const [processedPhotos, setProcessedPhotos] = useState([]);
 
-  const handleWatermarkUpload = (e) => {
-    setWatermark(e.target.files[0]);
-  };
-
-  const handlePhotosUpload = (e) => {
-    setPhotos([...e.target.files]);
-  };
-
-  const handleSubmit = async () => {
-    if (!watermark || photos.length === 0) {
-      alert("Por favor, sube una marca de agua y al menos una foto.");
-      return;
-    }
-
+  const handleOriginalPhotosUpload = async (e) => {
+    const files = e.target.files;
     const formData = new FormData();
-    formData.append("watermark", watermark);
-    photos.forEach((photo) => formData.append("photos", photo));
+
+    for (const file of files) {
+      formData.append("photos", file);
+    }
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/process",
+        "http://localhost:5000/upload-originals",
         formData,
         {
           headers: {
@@ -36,7 +25,27 @@ function App() {
         }
       );
 
+      alert("Imágenes originales subidas con éxito.");
+      setOriginalPhotos(response.data.urls);
+    } catch (error) {
+      console.error("Error al subir las imágenes originales:", error);
+      alert("Hubo un error al subir las imágenes originales.");
+    }
+  };
+
+  const handleProcessPhotos = async () => {
+    if (originalPhotos.length === 0) {
+      alert("Por favor, sube las imágenes originales antes de procesarlas.");
+      return;
+    }
+
+    try {
+      const response = await axios.post("http://localhost:5000/process", {
+        originalUrls: originalPhotos,
+      });
+
       setProcessedPhotos(response.data.urls);
+      alert("Fotos procesadas con éxito.");
     } catch (error) {
       console.error("Error al procesar las fotos:", error);
       alert("Hubo un error al procesar las fotos.");
@@ -45,24 +54,22 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Aplicar Marca de Agua</h1>
+      <h1>Gestión de Imágenes</h1>
 
       <div>
-        <h2>Subir Marca de Agua</h2>
-        <input type="file" accept="image/*" onChange={handleWatermarkUpload} />
-      </div>
-
-      <div>
-        <h2>Subir Fotos</h2>
+        <h2>Subir Imágenes Originales</h2>
         <input
           type="file"
           accept="image/*"
           multiple
-          onChange={handlePhotosUpload}
+          onChange={handleOriginalPhotosUpload}
         />
       </div>
 
-      <button onClick={handleSubmit}>Procesar Fotos</button>
+      <div>
+        <h2>Procesar Imágenes</h2>
+        <button onClick={handleProcessPhotos}>Procesar Fotos</button>
+      </div>
 
       <div>
         <h2>Fotos Procesadas</h2>
